@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Guide — 실시간 동적 투자 비서</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;500;700;800&display=swap');
+        
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: 'Noto Sans KR', sans-serif;
+            background: #060d1a;
+            color: #e2e8f0;
+            min-height: 100vh;
+            padding-bottom: 50px;
+        }
+        
+        /* Header */
+        .header {
+            position: sticky; top: 0; z-index: 100;
+            background: rgba(6, 13, 26, 0.97);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+            padding: 15px 20px; display: flex; align-items: center; gap: 12px;
+            backdrop-filter: blur(20px);
+        }
+        .header-logo {
+            width: 36px; height: 36px;
+            background: linear-gradient(135deg, #f59e0b, #d97706);
+            border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 17px;
+        }
+        .header-title { font-size: 16px; font-weight: 800; color: #f8fafc; }
+        .header-sub { font-size: 10px; color: #64748b; }
+        .live-badge {
+            margin-left: auto; background: rgba(16, 185, 129, 0.12);
+            border: 1px solid rgba(16, 185, 129, 0.3); color: #10b981;
+            font-size: 10px; padding: 3px 9px; border-radius: 9999px; font-weight: 600;
+        }
+
+        /* Tabs */
+        .tabs-container { background: rgba(6, 13, 26, 0.95); border-bottom: 1px solid rgba(255, 255, 255, 0.05); overflow-x: auto; }
+        .tabs { display: flex; padding: 0 12px; min-width: max-content; }
+        .tab-btn {
+            background: none; border: none; padding: 13px 14px 11px; cursor: pointer;
+            color: #475569; border-bottom: 2px solid transparent;
+            display: flex; flex-direction: column; align-items: center; gap: 2px;
+            transition: all 0.2s; font-family: inherit; white-space: nowrap;
+        }
+        .tab-btn.active[data-tab="0"] { color: #f59e0b; border-bottom-color: #f59e0b; }
+        .tab-btn.active[data-tab="1"] { color: #fb923c; border-bottom-color: #fb923c; }
+        .tab-btn.active[data-tab="2"] { color: #8b5cf6; border-bottom-color: #8b5cf6; }
+
+        .container { max-width: 860px; margin: 0 auto; padding: 20px 14px; }
+        .panel { display: none; }
+        .panel.active { display: block; animation: fadeUp 0.4s ease-out; }
+
+        .card {
+            background: rgba(12, 20, 40, 0.85); border-radius: 14px;
+            margin-bottom: 14px; border: 1px solid rgba(255, 255, 255, 0.07);
+            padding: 20px; backdrop-filter: blur(12px);
+        }
+        .card-title { font-size: 12px; font-weight: 700; margin-bottom: 14px; letter-spacing: 1px; }
+        
+        .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-bottom: 16px; }
+        .grid-3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 20px; }
+
+        label { display: block; font-size: 11px; color: #64748b; font-weight: 600; margin-bottom: 7px; }
+        input {
+            width: 100%; padding: 11px 14px; background: rgba(255, 255, 255, 0.05); 
+            border: 1px solid rgba(255, 255, 255, 0.1); border-radius: 10px; color: #e2e8f0; font-size: 15px; outline: none;
+        }
+        .btn {
+            width: 100%; padding: 14px; border: none; border-radius: 11px;
+            color: #fff; font-size: 14px; font-weight: 800; cursor: pointer;
+        }
+        .badge { font-size: 10px; font-weight: 700; padding: 3px 9px; border-radius: 9999px; display: inline-block; }
+
+        /* Analyst Box */
+        .analyst-box { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 12px; }
+        .analyst { border-radius: 10px; padding: 12px; font-size: 12px; line-height: 1.7; }
+        .analyst-name { font-size: 11px; font-weight: 700; margin-bottom: 4px; }
+
+        /* News Section */
+        .news-item {
+            padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 12px; line-height: 1.5;
+        }
+        .news-item:last-child { border-bottom: none; }
+        .news-title { font-weight: 700; color: #f8fafc; text-decoration: none; display: block; margin-bottom: 3px; }
+        .news-title:hover { color: #f59e0b; }
+        .news-date { font-size: 10px; color: #475569; }
+
+        .loading { text-align: center; color: #64748b; font-size: 13px; padding: 20px; }
+        @keyframes fadeUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+    </style>
+</head>
+<body>
+
+    <div class="header">
+        <div class="header-logo">📡</div>
+        <div>
+            <div class="header-title">Stock Guide LIVE</div>
+            <div class="header-sub">실시간 주가 조회 및 인터넷 종합 뉴스 동적 비서</div>
+        </div>
+        <div class="live-badge" id="live-time">● 조회중</div>
+    </div>
+
+    <div class="tabs-container">
+        <div class="tabs">
+            <button class="tab-btn active" data-tab="0">🎯 실시간 진단 & 뉴스</button>
+            <button class="tab-btn" data-tab="1">💰 배당 밸런서 계산</button>
+            <button class="tab-btn" data-tab="2">⚙️ 내 관심 종목 세팅</button>
+        </div>
+    </div>
+
+    <div class="container">
+        
+        <div id="panel-0" class="panel active">
+            <div class="card" style="border-top: 2px solid #f59e0b;">
+                <div class="card-title" style="color: #f59e0b;">⚡ 실시간 분석할 종목 선택</div>
+                <div class="grid-2" style="grid-template-columns: 2fr 1fr;">
+                    <div>
+                        <label>검색할 종목 선택</label>
+                        <select id="stock-selector" style="width:100%; padding:11px; background:#121c28; color:#fff; border-radius:10px; border:1px solid #2d3748;">
+                            </select>
+                    </div>
+                    <div>
+                        <label>&nbsp;</label>
+                        <button class="btn" style="background: linear-gradient(90deg, #f59e0b, #d97706); padding:11px;" onclick="loadRealtimeData()">조회</button>
+                    </div>
+                </div>
+            </div>
+
+            <div id="realtime-result">
+                <div class="loading">조회 버튼을 누르면 실시간 시세와 관련 인터넷 기사를 긁어옵니다.</div>
+            </div>
+        </div>
+
+        <div id="panel-1" class="panel">
+            <div class="card" style="border-top: 2px solid #fb923c;">
+                <div class="card-title" style="color: #fb923c;">◆ 내 계좌 맞춤 물타기 & 배당 역산</div>
+                <div class="grid-3">
+                    <div>
+                        <label>내 보유 평단가 (원)</label>
+                        <input type="number" id="t1-my-price" value="75000">
+                    </div>
+                    <div>
+                        <label>현재 보유 수량 (주)</label>
+                        <input type="number" id="t1-my-qty" value="20">
+                    </div>
+                    <div>
+                        <label>물타기 가용 금액 (원)</label>
+                        <input type="number" id="t1-cash" value="1000000">
+                    </div>
+                </div>
+                <button class="btn" style="background: linear-gradient(90deg, #fb923c, #ea580c);" onclick="calculateBalancer()">시뮬레이션 가동</button>
+            </div>
+            <div id="balancer-result"></div>
+        </div>
+
+        <div id="panel-2" class="panel">
+            <div class="card" style="border-top: 2px solid #8b5cf6;">
+                <div class="card-title" style="color: #8b5cf6;">⚙️ 실시간 추적용 종목 코드 관리 (한국주식 전용)</div>
+                <p style="font-size:12px; color:#94a3b8; margin-bottom:15px;">야후 파이낸스 실시간 연동을 위해 6자리 종목코드 뒤에 <strong style="color:#fff">.KS(코스피)</strong> 또는 <strong style="color:#fff">.KQ(코스닥)</strong>를 붙여주세요.</p>
+                <div id="custom-stock-list"></div>
+                <hr style="border:none; border-top:1px solid rgba(255,255,255,0.05); margin:15px 0;">
+                <div class="grid-3" style="grid-template-columns: 1fr 1fr 1fr;">
+                    <input type="text" id="new-stock-name" placeholder="예: 삼성전자">
+                    <input type="text" id="new-stock-code" placeholder="예: 005930.KS">
+                    <button class="btn" style="background:#8b5cf6; padding:8px;" onclick="addCustomStock()">➕ 종목 추가</button>
+                </div>
+            </div>
+        </div>
+
+    </div>
+
+    <script>
+        // 현재 조회 시각 헤더 표시
+        document.getElementById('live-time').innerText = "● 기준시각: " + new Date().toLocaleTimeString();
+
+        // 초기 기본 추적 종목 (Local Storage로 브라우저에 저장됨)
+        let myStocks = JSON.parse(localStorage.getItem('myStocks')) || [
+            { name: "삼성전자", code: "005930.KS" },
+            { name: "K-Ensol (엔에스브이)", code: "004060.KS" },
+            { name: "GST", code: "083450.KQ" },
+            { name: "한화엔진", code: "082740.KS" }
+        ];
+
+        // 탭 전환 시스템
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', () => {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                btn.classList.add('active');
+                document.getElementById(`panel-${btn.getAttribute('data-tab')}`).classList.add('active');
+            });
+        });
+
+        // 세팅 화면 그리기 및 셀렉터 갱신
+        function renderSettings() {
+            localStorage.setItem('myStocks', JSON.stringify(myStocks));
+            const selector = document.getElementById('stock-selector');
+            const listDiv = document.getElementById('custom-stock-list');
+            
+            selector.innerHTML = '';
+            listDiv.innerHTML = '';
+
+            myStocks.forEach((s, idx) => {
+                selector.innerHTML += `<option value="${s.code}">${s.name} (${s.code})</option>`;
+                listDiv.innerHTML += `
+                    <div style="display:flex; justify-content:space-between; margin-bottom:8px; font-size:13px; background:rgba(255,255,255,0.02); padding:8px; border-radius:6px;">
+                        <span><strong>${s.name}</strong> (${s.code})</span>
+                        <span style="color:#ef4444; cursor:pointer;" onclick="deleteStock(${idx})">삭제</span>
+                    </div>
+                `;
+            });
+        }
+
+        function addCustomStock() {
+            const name = document.getElementById('new-stock-name').value.trim();
+            const code = document.getElementById('new-stock-code').value.trim();
+            if(name && code) {
+                myStocks.push({ name, code });
+                document.getElementById('new-stock-name').value = '';
+                document.getElementById('new-stock-code').value = '';
+                renderSettings();
+            }
+        }
+
+        function deleteStock(idx) {
+            myStocks.splice(idx, 1);
+            renderSettings();
+        }
+
+        // --- ⚡ 핵심 기능: 실시간 주가 및 인터넷 기사 무료 크롤링 엔진 ---
+        async function loadRealtimeData() {
+            const code = document.getElementById('stock-selector').value;
+            const name = myStocks.find(s => s.code === code).name;
+            const resultDiv = document.getElementById('realtime-result');
+            
+            resultDiv.innerHTML = `<div class="loading">🔄 인터넷 망에서 [${name}]의 현재 주가와 실시간 기사를 분석 중입니다...</div>`;
+
+            try {
+                // 1. 야후 파이낸스 무료 API를 우회하여 실시간 주가 취득
+                const priceRes = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${code}`);
+                const priceData = await priceRes.json();
+                const meta = priceData.chart.result[0].meta;
+                const currentPrice = Math.round(meta.regularMarketPrice);
+                const prevClose = meta.previousClose;
+                const changePct = (((currentPrice - prevClose) / prevClose) * 100).toFixed(2);
+                
+                // 임시 전역 보관 (배당/물타기 탭에서 연동)
+                window.lastSearchedPrice = currentPrice;
+                window.lastSearchedName = name;
+
+                // 2. 구글 뉴스 RSS 피드를 무료 프록시 서버를 통해 실시간으로 긁어오기 (인터넷 뉴스 반영)
+                const newsSearchKeyword = encodeURIComponent(name);
+                const newsRes = await fetch(`https://api.rss2json.com/v1/api.json?rss_url=https://news.google.com/rss/search?q=${newsSearchKeyword}%26hl=ko%26gl=KR%26ceid=KR:ko`);
+                const newsData = await newsRes.json();
+                
+                let newsHtml = '';
+                if(newsData.items && newsData.items.length > 0) {
+                    newsData.items.slice(0, 3).forEach(item => {
+                        newsHtml += `
+                            <div class="news-item">
+                                <a class="news-title" href="${item.link}" target="_blank">🔗 ${item.title}</a>
+                                <div class="news-date">발행처: ${item.author || '언론사'} · 수집시각: ${item.pubDate}</div>
+                            </div>
+                        `;
+                    });
+                } else {
+                    newsHtml = '<div style="font-size:12px; color:#64748b;">최근 24시간 내 연동된 실시간 인터넷 기사가 없습니다.</div>';
+                }
+
+                // AI 가상 진단 스코어링 규칙 (RSI 등 수치 대용)
+                const score = changePct > 0 ? 8 : 6;
+
+                resultDiv.innerHTML = `
+                    <div class="card" style="border-left: 4px solid #f59e0b;">
+                        <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
+                            <div>
+                                <span style="font-size:22px; font-weight:800;">${name}</span>
+                                <span style="font-size:12px; color:#64748b; margin-left:6px;">${code}</span>
+                            </div>
+                            <div style="text-align:right;">
+                                <div style="font-size:20px; font-weight:800; color:${changePct >= 0 ? '#10b981':'#ef4444'};">
+                                    ${currentPrice.toLocaleString()}원
+                                </div>
+                                <div style="font-size:11px; color:${changePct >= 0 ? '#10b981':'#ef4444'};">
+                                    ${changePct >= 0 ? '▲':'▼'} ${changePct}%
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title" style="color:#60a5fa;">📰 실시간 인터넷 연결 뉴스 (실시간 반영)</div>
+                        ${newsHtml}
+                    </div>
+
+                    <div class="card">
+                        <div class="card-title" style="color:#10b981;">🤝 샘 & 해밍턴 실시간 합동 작전 타임</div>
+                        <div class="analyst-box">
+                            <div class="analyst" style="background:rgba(59,130,246,0.1); border:1px solid rgba(59,130,246,0.2);">
+                                <div class="analyst-name" style="color:#60a5fa;">📊 샘 (실시간 데이터 분석)</div>
+                                <span style="color:#cbd5e1">현재가 ${currentPrice.toLocaleString()}원은 전일 종가 대비 ${changePct}% 변동 중입니다. 뉴스피드 기반 수급 유입 모멘텀을 고려할 때, 단기 변동성 확장에 유의하십시오.</span>
+                            </div>
+                            <div class="analyst" style="background:rgba(74,222,128,0.1); border:1px solid rgba(74,222,128,0.2);">
+                                <div class="analyst-name" style="color:#4ade80;">💼 해밍턴 (실전 투자 가이드)</div>
+                                <span style="color:#cbd5e1">위에 링크 걸어둔 실제 최신 기사들 제목 제목 꼭 클릭해서 읽어보세요! 세력들이 찌라시 뿌리는 타이밍인지, 진짜 호재가 터진 건지 구별해야 물리거나 털리지 않습니다!</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+
+            } catch (err) {
+                resultDiv.innerHTML = `<div class="card" style="color:#ef4444;">❌ 실시간 데이터 긁어오기 실패. 인터넷 연결 상태나 종목코드(.KS/.KQ)를 확인해 주세요. 오류내용: ${err.message}</div>`;
+            }
+        }
+
+        // --- Tab 1: 물타기 및 배당 계산기 ---
+        function calculateBalancer() {
+            const myPrice = Number(document.getElementById('t1-my-price').value);
+            const myQty = Number(document.getElementById('t1-my-qty').value);
+            const cash = Number(document.getElementById('t1-cash').value);
+            const resultDiv = document.getElementById('balancer-result');
+
+            const currentPrice = window.lastSearchedPrice || Math.round(myPrice * 0.9); // 조회된 주가 없으면 10% 하락 가정
+            const stockName = window.lastSearchedName || "선택 종목";
+
+            const currentLossPct = (((currentPrice - myPrice) / myPrice) * 100).toFixed(1);
+            
+            // 물타기 연산
+            const buyQty = Math.floor(cash / currentPrice);
+            const totalQty = myQty + buyQty;
+            const nextAvgPrice = Math.round(((myPrice * myQty) + (currentPrice * buyQty)) / totalQty);
+            const nextLossPct = (((currentPrice - nextAvgPrice) / nextAvgPrice) * 100).toFixed(1);
+
+            resultDiv.innerHTML = `
+                <div class="card" style="border-top:2px solid #fb923c;">
+                    <div class="card-title" style="color:#fb923c;">🎯 [${stockName}] 기준 물타기 시뮬레이션 결과</div>
+                    <div style="font-size:13px; margin-bottom:12px; color:#cbd5e1;">
+                        기준 주가: <strong style="color:#fff">${currentPrice.toLocaleString()}원</strong> (실시간 탭에서 변경 가능)
+                    </div>
+                    <div class="grid-2">
+                        <div style="background:rgba(239,68,68,0.08); padding:10px; border-radius:8px;">
+                            <div style="font-size:10px; color:#fca5a5;">현재 내 계좌 상태</div>
+                            <div style="font-size:14px; font-weight:700; margin-top:3px;">평단: ${myPrice.toLocaleString()}원</div>
+                            <div style="font-size:13px; color:#ef4444;">손익률: ${currentLossPct}%</div>
+                        </div>
+                        <div style="background:rgba(16,185,129,0.08); padding:10px; border-radius:8px;">
+                            <div style="font-size:10px; color:#6ee7b7;">물타기 후 예측 결과</div>
+                            <div style="font-size:14px; font-weight:700; margin-top:3px;">새 평단: ${nextAvgPrice.toLocaleString()}원</div>
+                            <div style="font-size:13px; color:#10b981;">추가 매수량: +${buyQty}주 (평단 탈출선 대폭 하락)</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
+
+        // 초기 실행
+        renderSettings();
+    </script>
+</body>
+</html>
